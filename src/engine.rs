@@ -13,6 +13,7 @@ pub struct AudioEngine {
     perlin: Perlin,
     start_time: Instant,
     config: VisualizerConfig,
+    is_playing: bool,
 }
 
 impl AudioEngine {
@@ -22,23 +23,38 @@ impl AudioEngine {
             .unwrap()
             .as_secs() as u32;
 
+        let config = VisualizerConfig::load();
+        let auto_play = config.playback.auto_play;
+        
         AudioEngine {
             sample_rate,
             fft_size,
             fft_data: Arc::new(Mutex::new(vec![0.0; fft_size])),
             perlin: Perlin::new(seed),
             start_time: Instant::now(),
-            config: VisualizerConfig::load(),
+            config,
+            is_playing: auto_play,
         }
     }
 
+    pub fn toggle_playback(&mut self) {
+        self.is_playing = !self.is_playing;
+    }
+
+    pub fn is_playing(&self) -> bool {
+        self.is_playing
+    }
+
     pub fn process_audio(&self, data: &[f32]) {
+        if !self.is_playing {
+            return;
+        }
         let mut planner = FftPlanner::new();
         let fft = planner.plan_fft_forward(self.fft_size);
 
         let mut buffer: Vec<Complex<f32>> = data.iter()
             .take(self.fft_size)
-            .map(|&x| Complex::new(x, 0.0))
+            .map(|&x| Complex::new(x * self.config.playback.volume, 0.0))
             .collect();
 
         // Apply Hann window
@@ -61,7 +77,7 @@ impl AudioEngine {
         }
     }
 
-    pub fn draw(&self, frame: &mut [u8], width: u32, height: u32) {
+    pub fn draw(&self, frame: &mut [u8], width: u32, _height: u32) {
         let fft_data = self.fft_data.lock().unwrap();
         let elapsed = self.start_time.elapsed().as_secs_f64();
 
@@ -92,5 +108,16 @@ impl AudioEngine {
                 255
             ]);
         }
+    }
+
+    pub fn set_volume(&mut self, volume: f32) {
+        self.config.playback.volume = volume.clamp(0.0, 1.0);
+        if let Err(err) = self.config.save() {
+            log::error!("Failed to save config: {}", err);
+        }
+    }
+
+    pub fn get_volume(&self) -> f32 {
+        self.config.playback.volume
     }
 } 

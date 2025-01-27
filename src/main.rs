@@ -124,6 +124,12 @@ fn main() -> Result<(), Error> {
                 return;
             }
 
+            // Add space key handler for play/pause
+            if input.key_pressed(winit::event::VirtualKeyCode::Space) {
+                let mut engine = engine.lock().unwrap();
+                engine.toggle_playback();
+            }
+
             if let Some(size) = input.window_resized() {
                 if let Err(err) = pixels.resize_surface(size.width, size.height) {
                     log::error!("pixels.resize_surface() failed: {err}");
