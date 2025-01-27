@@ -1,0 +1,15 @@
+[package]
+name = "afve"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cpal = "0.15"
+rustfft = "6.1"
+pixels = "0.13"
+winit = "0.28"
+winit_input_helper = "0.14"
+noise = "0.8"
+error-iter = "0.4"
+log = "0.4"
+env_logger = "0.10"
