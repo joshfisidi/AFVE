@@ -1,1 +1,8 @@
- 
+noise_scale = 0.01
+noise_speed = 0.1
+fft_scale = 100.0
+
+[color_scheme]
+r = 255
+g = 100
+b = 100 

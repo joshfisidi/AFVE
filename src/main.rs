@@ -1,5 +1,4 @@
-mod engine;
-use engine::AudioEngine;
+use afve::engine::AudioEngine;
 use symphonia::core::audio::SampleBuffer;
 use pixels::{Error, Pixels, SurfaceTexture};
 use winit::dpi::LogicalSize;

@@ -4,6 +4,7 @@ use rustfft::{FftPlanner, num_complex::Complex};
 use noise::{NoiseFn, Perlin};
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::audio::Signal;
+use crate::config::VisualizerConfig;
 
 pub struct AudioEngine {
     sample_rate: u32,
@@ -11,6 +12,7 @@ pub struct AudioEngine {
     fft_data: Arc<Mutex<Vec<f32>>>,
     perlin: Perlin,
     start_time: Instant,
+    config: VisualizerConfig,
 }
 
 impl AudioEngine {
@@ -26,6 +28,7 @@ impl AudioEngine {
             fft_data: Arc::new(Mutex::new(vec![0.0; fft_size])),
             perlin: Perlin::new(seed),
             start_time: Instant::now(),
+            config: VisualizerConfig::load(),
         }
     }
 
@@ -66,24 +69,28 @@ impl AudioEngine {
             let x = (i % width as usize) as f64;
             let y = (i / width as usize) as f64;
 
-            let noise_scale = 0.01;
             let noise_val = self.perlin.get([
-                x * noise_scale + elapsed * 0.1,
-                y * noise_scale,
-                elapsed * 0.2
+                x * self.config.noise_scale + elapsed * self.config.noise_speed,
+                y * self.config.noise_scale,
+                elapsed * self.config.noise_speed * 2.0
             ]) as f32;
 
             let fft_index = (x / width as f64 * (self.fft_size / 2) as f64) as usize;
             let fft_value = if fft_index < fft_data.len() {
-                fft_data[fft_index] / 100.0
+                fft_data[fft_index] / self.config.fft_scale
             } else {
                 0.0
             };
 
             let combined = (noise_val as f32 + fft_value).max(0.0).min(1.0);
-            let color = (combined * 255.0) as u8;
+            let color_value = (combined * 255.0) as u8;
 
-            pixel.copy_from_slice(&[color, color, color, 255]);
+            pixel.copy_from_slice(&[
+                (color_value as u32 * self.config.color_scheme.r as u32 / 255) as u8,
+                (color_value as u32 * self.config.color_scheme.g as u32 / 255) as u8,
+                (color_value as u32 * self.config.color_scheme.b as u32 / 255) as u8,
+                255
+            ]);
         }
     }
 } 
