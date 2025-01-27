@@ -13,3 +13,4 @@ noise = "0.8"
 error-iter = "0.4"
 log = "0.4"
 env_logger = "0.10"
+symphonia = { version = "0.5", features = ["mp3", "wav"] }

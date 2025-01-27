@@ -1,7 +1,6 @@
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use pixels::{Error, Pixels, SurfaceTexture};
 use winit::dpi::LogicalSize;
-use winit::event::{Event, VirtualKeyCode};
+use winit::event::Event;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
@@ -9,6 +8,15 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH, Instant};
 use rustfft::{FftPlanner, num_complex::Complex};
 use noise::{NoiseFn, Perlin};
+use std::fs::File;
+use std::path::Path;
+use symphonia::core::audio::SampleBuffer;
+use symphonia::core::formats::FormatOptions;
+use symphonia::core::io::MediaSourceStream;
+use symphonia::core::meta::MetadataOptions;
+use symphonia::core::probe::Hint;
+use symphonia::default::get_probe;
+use symphonia::default::get_codecs;
 
 const WIDTH: u32 = 800;
 const HEIGHT: u32 = 600;
@@ -129,32 +137,53 @@ fn main() -> Result<(), Error> {
     let mut pixels = Pixels::new(WIDTH, HEIGHT, surface_texture)?;
 
     let engine = Arc::new(Mutex::new(AudioEngine::new(SAMPLE_RATE, FFT_SIZE)));
-
-    let host = cpal::default_host();
-    let device = host.default_input_device()
-        .expect("no input device available");
-
-    let config = cpal::StreamConfig {
-        channels: 1,
-        sample_rate: cpal::SampleRate(SAMPLE_RATE),
-        buffer_size: cpal::BufferSize::Default,
-    };
-
     let engine_clone = Arc::clone(&engine);
 
-    let stream = device.build_input_stream(
-        &config,
-        move |data: &[f32], _: &cpal::InputCallbackInfo| {
-            let engine = engine_clone.lock().unwrap();
-            engine.process_audio(data);
-        },
-        move |err| {
-            eprintln!("Error in audio stream: {:?}", err);
-        },
-        None
-    ).unwrap();
+    // Open and decode audio file
+    let path = Path::new("audio.mp3");
+    let file = File::open(path).expect("Failed to open audio file");
+    let media_source = MediaSourceStream::new(Box::new(file), Default::default());
 
-    stream.play().unwrap();
+    let mut hint = Hint::new();
+    hint.with_extension("mp3");
+
+    // Create format and metadata options
+    let format_opts = FormatOptions::default();
+    let metadata_opts = MetadataOptions::default();
+
+    // Get default decoder with proper options
+    let probed = get_probe()
+        .format(&hint, media_source, &format_opts, &metadata_opts)
+        .expect("Unsupported format");
+
+    let mut format = probed.format;
+    let track = format.default_track().expect("No default track");
+    
+    // Create decoder with proper options
+    let decoder_opts = Default::default();
+    let mut decoder = get_codecs()
+        .make(&track.codec_params, &decoder_opts)
+        .expect("Unsupported codec");
+
+    // Audio processing thread
+    std::thread::spawn(move || {
+        while let Ok(packet) = format.next_packet() {
+            let decoded = decoder.decode(&packet).expect("Decode error");
+            
+            let spec = *decoded.spec();
+            let mut sample_buf = SampleBuffer::<f32>::new(
+                decoded.capacity() as u64,
+                spec
+            );
+            sample_buf.copy_interleaved_ref(decoded);
+            
+            let engine = engine_clone.lock().unwrap();
+            engine.process_audio(sample_buf.samples());
+            
+            // Adjust playback speed (lower value = faster)
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    });
 
     event_loop.run(move |event, _, control_flow| {
         if let Event::RedrawRequested(_) = event {
